@@ -57,7 +57,7 @@ class YouTubeScraper:
         except Exception:
             return None
 
-    def get_latest_videos(self, channel_id: str, hours: int = 24) -> list[ChannelVideo]:
+    def get_latest_videos(self, channel_id: str, hours: int = 24, include_fallback_latest: bool = True) -> list[ChannelVideo]:
         feed = feedparser.parse(self._get_rss_url(channel_id))
         if not feed.entries:
             return []
@@ -65,19 +65,27 @@ class YouTubeScraper:
         cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
         videos = []
         
+        fallback_video: Optional[ChannelVideo] = None
+
         for entry in feed.entries:
-            if "/shorts/" in entry.link:
-                continue
             published_time = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+            video_id = self._extract_video_id(entry.link)
+            current_video = ChannelVideo(
+                title=entry.title,
+                url=entry.link,
+                video_id=video_id,
+                published_at=published_time,
+                description=entry.get("summary", "")
+            )
+
+            if fallback_video is None:
+                fallback_video = current_video
+
             if published_time >= cutoff_time:
-                video_id = self._extract_video_id(entry.link)
-                videos.append(ChannelVideo(
-                    title=entry.title,
-                    url=entry.link,
-                    video_id=video_id,
-                    published_at=published_time,
-                    description=entry.get("summary", "")
-                ))
+                videos.append(current_video)
+
+        if not videos and include_fallback_latest and fallback_video is not None:
+            videos.append(fallback_video)
         
         return videos
 

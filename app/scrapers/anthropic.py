@@ -23,7 +23,7 @@ class AnthropicScraper:
         ]
         self.converter = DocumentConverter()
 
-    def get_articles(self, hours: int = 24) -> List[AnthropicArticle]:
+    def get_articles(self, hours: int = 24, include_fallback_latest: bool = True) -> List[AnthropicArticle]:
         now = datetime.now(timezone.utc)
         cutoff_time = now - timedelta(hours=hours)
         articles = []
@@ -33,6 +33,8 @@ class AnthropicScraper:
             feed = feedparser.parse(rss_url)
             if not feed.entries:
                 continue
+
+            fallback_article: Optional[AnthropicArticle] = None
             
             for entry in feed.entries:
                 published_parsed = getattr(entry, "published_parsed", None)
@@ -40,18 +42,26 @@ class AnthropicScraper:
                     continue
                 
                 published_time = datetime(*published_parsed[:6], tzinfo=timezone.utc)
-                if published_time >= cutoff_time:
-                    guid = entry.get("id", entry.get("link", ""))
-                    if guid not in seen_guids:
-                        seen_guids.add(guid)
-                        articles.append(AnthropicArticle(
-                            title=entry.get("title", ""),
-                            description=entry.get("description", ""),
-                            url=entry.get("link", ""),
-                            guid=guid,
-                            published_at=published_time,
-                            category=entry.get("tags", [{}])[0].get("term") if entry.get("tags") else None
-                        ))
+                guid = entry.get("id", entry.get("link", ""))
+                current_article = AnthropicArticle(
+                    title=entry.get("title", ""),
+                    description=entry.get("description", ""),
+                    url=entry.get("link", ""),
+                    guid=guid,
+                    published_at=published_time,
+                    category=entry.get("tags", [{}])[0].get("term") if entry.get("tags") else None
+                )
+
+                if fallback_article is None:
+                    fallback_article = current_article
+
+                if published_time >= cutoff_time and guid not in seen_guids:
+                    seen_guids.add(guid)
+                    articles.append(current_article)
+
+            if include_fallback_latest and fallback_article is not None and fallback_article.guid not in seen_guids:
+                seen_guids.add(fallback_article.guid)
+                articles.append(fallback_article)
         
         return articles
 

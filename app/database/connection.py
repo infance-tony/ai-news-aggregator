@@ -13,7 +13,12 @@ def get_database_url() -> str:
     db = os.getenv("POSTGRES_DB", "ai_news_aggregator")
     return f"postgresql://{user}:{password}@{host}:{port}/{db}"
 
-engine = create_engine(get_database_url())
+engine = create_engine(
+    get_database_url(),
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_session():

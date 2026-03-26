@@ -1,4 +1,5 @@
 import logging
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,6 +18,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _is_valid_email(value: str) -> bool:
+    return bool(EMAIL_PATTERN.match(value))
+
+
+def _build_recipients(primary: str, extra: str) -> list[str]:
+    raw_recipients = [r.strip() for r in [primary] + extra.split(",") if r and r.strip()]
+    invalid = [r for r in raw_recipients if not _is_valid_email(r)]
+    if invalid:
+        invalid_values = ", ".join(invalid)
+        raise ValueError(f"Invalid email recipient(s): {invalid_values}")
+    return raw_recipients
+
+
 def generate_email_digest(hours: int = 24, top_n: int = 10) -> EmailDigestResponse:
     curator = CuratorAgent(USER_PROFILE)
     email_agent = EmailAgent(USER_PROFILE)
@@ -27,7 +44,13 @@ def generate_email_digest(hours: int = 24, top_n: int = 10) -> EmailDigestRespon
     
     if total == 0:
         logger.warning(f"No digests found from the last {hours} hours")
-        raise ValueError("No digests available")
+        introduction = email_agent.generate_introduction([])
+        return EmailDigestResponse(
+            introduction=introduction,
+            articles=[],
+            total_ranked=0,
+            top_n=top_n,
+        )
     
     logger.info(f"Ranking {total} digests for email generation")
     ranked_articles = curator.rank_digests(digests)
@@ -77,7 +100,7 @@ def send_digest_email(hours: int = 24, top_n: int = 10) -> dict:
         import os
         primary = os.getenv("MY_EMAIL")
         extra = os.getenv("EXTRA_RECIPIENTS", "")
-        recipients = [r.strip() for r in [primary] + extra.split(",") if r.strip()]
+        recipients = _build_recipients(primary, extra)
 
         send_email(
             subject=subject,
