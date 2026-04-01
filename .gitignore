@@ -102,3 +102,4 @@ app/alembic/versions/*
 playground/*.png
 
 app/google-service-account.json
+PROJECT_INFOGRAPHICS.md
